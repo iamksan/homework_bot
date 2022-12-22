@@ -1,8 +1,17 @@
-class WrongHttpStatus(Exception):
+class NoToken(Exception):
     pass
 
-class KeyHomeworkStatusIsUnavailable(Exception):
+class EndPointError(Exception):
     pass
 
-class UnknownHomeworkStatus(Exception):
+class HTTPStatusCodeError(Exception):
+    pass
+
+class Nostatus(Exception):
+    pass
+
+class InvalidJSONTransform(Exception):
+    pass
+
+class VariableNotExists(Exception):
     pass

@@ -5,9 +5,9 @@ from http import HTTPStatus
 import telegram
 import requests
 
-from dotenv import load_dotenv
-
 import exceptions
+
+from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -17,14 +17,14 @@ TELEGRAM_TOKEN = os.getenv("TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 RETRY_PERIOD = 600
-ENDPOINT = "https://practicum.yandex.ru/api/user_api/homework_statuses/"
-HEADERS = {"Authorization": f"OAuth {PRACTICUM_TOKEN}"}
+ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
+HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
 
 
 HOMEWORK_VERDICTS = {
-    "approved": "Работа проверена: ревьюеру всё понравилось. Ура!",
-    "reviewing": "Работа взята на проверку ревьюером.",
-    "rejected": "Работа проверена: у ревьюера есть замечания.",
+    'approved': 'Работа проверена: ревьюеру всё понравилось. Ура!',
+    'reviewing': 'Работа взята на проверку ревьюером.',
+    'rejected': 'Работа проверена: у ревьюера есть замечания.'
 }
 
 logging.basicConfig(
@@ -36,7 +36,7 @@ logging.basicConfig(
 
 
 def check_tokens():
-    """Функция проверка токенов."""
+    """Проверка токенов."""
     tokens = {
         "practicum_token": PRACTICUM_TOKEN,
         "telegram_token": TELEGRAM_TOKEN,
@@ -45,36 +45,53 @@ def check_tokens():
 
     for key, value in tokens.items():
         if value is None:
-            logging.error(f"{key} отсутствует")
+            exceptions.NoToken(f"{key} отсутствует")
             return False
         return True
 
 
 def send_message(bot, message):
-    """Функция отправки сообщений."""
+    """Отправляет сообщение с статусом обработки дз."""
     try:
-        bot.send_message(TELEGRAM_CHAT_ID, message)
+        logging.debug('Начало отправки сообщений.')
+        bot.send_message(
+            TELEGRAM_CHAT_ID,
+            message
+        )
     except Exception as error:
-        logging.error(f"Ошибка при обращении к API Telegram: {error}")
+        logging.error(f'Ошибка отправки {message} : {error}')
 
 
 def get_api_answer(timestamp):
-    """Функция запроса API."""
-    timestamp = int(time.time())
-    params = {"from_date": timestamp}
-    response = requests.get(ENDPOINT, headers=HEADERS, params=params)
-    if response.status_code == HTTPStatus.OK:
-        return response.json()
-    else:
-        raise exceptions.WrongHttpStatus(
-            "Ошибка при обращении к API Яндекс.Практикума: ",
-            f'Код ответа: {response.json().get("code")}',
-            f'Сообщение сервера: {response.json().get("message")}',
+    """Получить ответ от сервера практикума по API."""
+    timestamp = timestamp or int(time.time())
+    params = {'from_date': timestamp}
+    try:
+        homework = requests.get(
+            ENDPOINT,
+            HEADERS,
+            params
         )
+    except requests.RequestException as error:
+        message = f'Ошибка запроса к ENDPOINT: {error}.'
+        logging.error(message)
+        raise exceptions.EndPointError(message)
+    status_code = homework.status_code
+    if status_code != HTTPStatus.OK:
+        message = f'Ошибка API: {status_code}'
+        logging.error(message)
+        raise exceptions.HTTPStatusCodeError(message)
+    try:
+        homework_json = homework.json()
+    except Exception as error:
+        message = f'Сбой при переводе в формат json: {error}'
+        logging.error(message)
+        raise exceptions.InvalidJSONTransform(message)
+    return homework_json
 
 
 def check_response(response):
-    """Функция проверки ответа API."""
+    """Проверка ответа."""
     try:
         timestamp = response["current_date"]
     except KeyError:
@@ -94,40 +111,51 @@ def check_response(response):
 
 
 def parse_status(homework):
-    """Функция проверки статуса домашнего задания."""
-    homework_name = homework["homework_name"]
-    homework_status = homework.get("status")
-    if homework_status is None:
-        raise exceptions.KeyHomeworkStatusIsUnavailable
-    if homework_status in HOMEWORK_VERDICTS:
-        verdict = HOMEWORK_VERDICTS.get(homework_status)
-        return f'Изменился статус проверки работы "{homework_name}". {verdict}'
-    else:
-        raise exceptions.UnknownHomeworkStatus
+    """Проверка статуса."""
+    if homework.get('homework_name') is None:
+        message = 'Нет названия!'
+        logging.error(message)
+        raise KeyError(message)
+
+    homework_name = homework.get('homework_name')
+
+    if homework.get('status') not in HOMEWORK_VERDICTS:
+        message = ('нет статуса.')
+        logging.error(message)
+        raise exceptions.Nostatus(message)
+
+    homework_status = homework.get('status')
+    verdict = HOMEWORK_VERDICTS.get(homework_status)
+    return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
 def main():
     """Основная логика работы бота."""
-    if check_tokens():
-        bot = telegram.Bot(token=TELEGRAM_TOKEN)
-        timestamp = int(time.time())
+    if not check_tokens():
+        message = 'Нет токена.'
+        logging.critical(message)
+        raise exceptions.VariableNotExists(message)
+    bot = telegram.Bot(token=TELEGRAM_TOKEN)
+    timestamp = int(time.time())
 
     while True:
         try:
-            respose = get_api_answer(timestamp)
-            homework = check_response(respose)
-            sum_homework = len(homework)
-            while sum_homework > 0:
-                message = parse_status(homework[sum_homework - 1])
+            response = get_api_answer(timestamp)
+            timestamp = response.get('current_date')
+            homeworks = check_response(response)
+
+            if homeworks:
+                message = parse_status(homeworks[0])
                 send_message(bot, message)
-            timestamp = int(time.time())
-            time.sleep(RETRY_PERIOD)
+            else:
+                logging.debug('Нет новых статусов.')
 
         except Exception as error:
-            message = f"Сбой в работе программы: {error}"
-            send_message(bot, message)
+            message = f'Сбой в работе программы: {error}'
+            logging.error(message)
+        finally:
             time.sleep(RETRY_PERIOD)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
