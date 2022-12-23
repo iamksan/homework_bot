@@ -30,9 +30,9 @@ HOMEWORK_VERDICTS = {
 logging.basicConfig(
     level=logging.DEBUG,
     filename="main.log",
-    filemode="a",
     format="%(asctime)s, %(levelname)s, %(message)s, %(name)s",
 )
+logger = logging.getLogger(__name__)
 
 
 def check_tokens():
@@ -53,18 +53,18 @@ def check_tokens():
 def send_message(bot, message):
     """Отправляет сообщение с статусом обработки дз."""
     try:
-        logging.debug('Начало отправки сообщений.')
+        logger.debug('Начало отправки сообщений.')
         bot.send_message(
             TELEGRAM_CHAT_ID,
             message
         )
     except Exception as error:
-        logging.error(f'Ошибка отправки {message} : {error}')
+        logger.error(f'Ошибка отправки {message} : {error}')
 
 
 def get_api_answer(timestamp):
     """Получить ответ от сервера практикума по API."""
-    timestamp = timestamp or int(time.time())
+    timestamp = int(time.time())
     params = {'from_date': timestamp}
     try:
         homework = requests.get(
@@ -74,18 +74,18 @@ def get_api_answer(timestamp):
         )
     except requests.RequestException as error:
         message = f'Ошибка запроса к ENDPOINT: {error}.'
-        logging.error(message)
+        logger.error(message)
         raise exceptions.EndPointError(message)
     status_code = homework.status_code
     if status_code != HTTPStatus.OK:
         message = f'Ошибка API: {status_code}'
-        logging.error(message)
+        logger.error(message)
         raise exceptions.HTTPStatusCodeError(message)
     try:
         homework_json = homework.json()
     except Exception as error:
         message = f'Сбой при переводе в формат json: {error}'
-        logging.error(message)
+        logger.error(message)
         raise exceptions.InvalidJSONTransform(message)
     return homework_json
 
@@ -95,36 +95,34 @@ def check_response(response):
     try:
         timestamp = response["current_date"]
     except KeyError:
-        logging.error(
+        logger.error(
             "Ключ current_date в ответе API Яндекс.Практикум отсутствует"
         )
     try:
         homeworks = response["homeworks"]
     except KeyError:
-        logging.error(
+        logger.error(
             "Ключ homeworks в ответе API Яндекс.Практикум отсутствует"
         )
-    if isinstance(timestamp, int) and isinstance(homeworks, list):
-        return homeworks
-    else:
+    if not isinstance(homeworks, list) and isinstance(timestamp, int):
         raise TypeError
+    return homeworks
 
 
 def parse_status(homework):
     """Проверка статуса."""
-    if homework.get('homework_name') is None:
+    homework_name = homework.get('homework_name')
+    if homework_name is None:
         message = 'Нет названия!'
-        logging.error(message)
+        logger.error(message)
         raise KeyError(message)
 
-    homework_name = homework.get('homework_name')
-
-    if homework.get('status') not in HOMEWORK_VERDICTS:
-        message = ('нет статуса.')
-        logging.error(message)
+    homework_status = homework.get('status')
+    if homework_status not in HOMEWORK_VERDICTS:
+        message = 'нет статуса.'
+        logger.error(message)
         raise exceptions.Nostatus(message)
 
-    homework_status = homework.get('status')
     verdict = HOMEWORK_VERDICTS.get(homework_status)
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
@@ -133,7 +131,7 @@ def main():
     """Основная логика работы бота."""
     if not check_tokens():
         message = 'Нет токена.'
-        logging.critical(message)
+        logger.critical(message)
         raise exceptions.VariableNotExists(message)
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     timestamp = int(time.time())
@@ -148,11 +146,11 @@ def main():
                 message = parse_status(homeworks[0])
                 send_message(bot, message)
             else:
-                logging.debug('Нет новых статусов.')
+                logger.debug('Нет новых статусов.')
 
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
-            logging.error(message)
+            logger.error(message)
         finally:
             time.sleep(RETRY_PERIOD)
 
