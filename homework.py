@@ -138,9 +138,9 @@ def main():
 
     while True:
         try:
-            response = get_api_answer(timestamp)
-            timestamp = response.get('current_date')
-            homeworks = check_response(response)
+            homework = get_api_answer(timestamp)
+            timestamp = homework.get('current_date')
+            homeworks = check_response(homework)
 
             if homeworks:
                 message = parse_status(homeworks[0])
@@ -150,7 +150,7 @@ def main():
 
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
-            logger.error(message)
+            send_message(message)
         finally:
             time.sleep(RETRY_PERIOD)
 
