@@ -64,7 +64,7 @@ def send_message(bot, message):
 
 def get_api_answer(timestamp):
     """Получить ответ от сервера практикума по API."""
-    timestamp = int(time.time())
+    timestamp = timestamp
     params = {'from_date': timestamp}
     try:
         homework = requests.get(
@@ -150,7 +150,11 @@ def main():
 
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
-            send_message(message)
+            if message:
+                message = send_message(bot, message[0])
+                send_message(message)
+            else:
+                None
         finally:
             time.sleep(RETRY_PERIOD)
 
