@@ -135,6 +135,7 @@ def main():
         raise exceptions.VariableNotExists(message)
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     timestamp = int(time.time())
+    error_message = ""
 
     while True:
         try:
@@ -150,11 +151,9 @@ def main():
 
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
-            if message:
-                message = send_message(bot, message[0])
-                send_message(message)
-            else:
-                None
+            if message != error_message:
+                send_message(bot, message)
+                error_message = message
         finally:
             time.sleep(RETRY_PERIOD)
 
