@@ -58,8 +58,10 @@ def send_message(bot, message):
             TELEGRAM_CHAT_ID,
             message
         )
+        return message
     except Exception as error:
         logger.error(f'Ошибка отправки {message} : {error}')
+        return ''
 
 
 def get_api_answer(timestamp):
