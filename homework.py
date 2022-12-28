@@ -58,22 +58,22 @@ def send_message(bot, message):
             TELEGRAM_CHAT_ID,
             message
         )
-        return message
+        return True
     except Exception as error:
         logger.error(f'Ошибка отправки {message} : {error}')
-        return ''
+        return False
 
 
 def get_api_answer(timestamp):
     """Получить ответ от сервера практикума по API."""
     timestamp = timestamp
-    params = {'from_date': timestamp}
-    try:
-        homework = requests.get(
-            ENDPOINT,
-            HEADERS,
-            params
+    params = dict(
+        url = ENDPOINT,
+        params={'from_date': timestamp},
+        headers=HEADERS
         )
+    try:
+        homework = requests.get(**params)
     except requests.RequestException as error:
         message = f'Ошибка запроса к ENDPOINT: {error}.'
         logger.error(message)
@@ -155,9 +155,9 @@ def main():
             message = f'Сбой в работе программы: {error}'
             if message != error_message:
                 send_message(bot, message)
-                error_message = message
-        finally:
-            time.sleep(RETRY_PERIOD)
+                if send_message != False:
+                    error_message = message
+        time.sleep(RETRY_PERIOD)
 
 
 if __name__ == '__main__':
